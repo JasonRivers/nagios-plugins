@@ -1,0 +1,276 @@
+#!/bin/bash
+#
+#    Program : check_snmp_printer.sh
+#            :
+#     Author : Jason Rivers <jason@jasonrivers.co.uk>
+#            :
+#    Purpose : Nagios plugin to return the Remaining pages on a Lexmark C530dn Toner (may work with other Lexmark printers)
+#            :
+# Parameters : --help
+#            : --version
+#            :
+#    Returns : Standard Nagios status_* codes as defined in utils.sh
+#            :
+#      Notes : Added support for Canon, also changed the MANUFACTURER MIB call, modifications for Mat with issues importing MIBs into SNMP
+#============:==============================================================
+
+#
+# Shamelessly stolen from other Nagios plugins.
+#
+
+PROGNAME=`basename $0`
+PROGPATH=`echo $0 | /bin/sed -e 's,[\\/][^\\/][^\\/]*$,,'`
+REVISION=`echo '$Revision: 1.2.0.0 $' | sed -e 's/[^0-9.]//g'`
+
+
+. $PROGPATH/utils.sh
+
+print_usage() {
+        echo "Usage: $PROGNAME --help"
+        echo "Usage: $PROGNAME --version"
+}
+
+print_help() {
+        print_revision $PROGNAME $REVISION
+        echo ""
+        print_usage
+        echo ""
+        echo "Printer Toner Status Check."
+        echo ""
+	exit 0
+#        support
+}
+
+
+# No command line arguments are required for this script. We accept only 2,
+# --help and --version.  If more than 1 is passed in then we have an error
+# condition.
+
+#if [ $# -le 4 ]; then
+#        print_usage
+#        exit $STATE_UNKNOWN
+#fi
+
+
+#
+# If we have arguments, process them.
+#
+exitstatus=$STATE_WARNING #default
+while test -n "$1"; do
+        case "$1" in
+                --help)
+                        print_help
+                        exit $STATE_OK
+                        ;;
+                -h)
+                        print_help
+                        exit $STATE_OK
+                        ;;
+                --version)
+                        print_revision $PROGNAME $REVISION
+                        exit $STATE_OK
+                        ;;
+                -V)
+                        print_revision $PROGNAME $REVISION
+                        exit $STATE_OK
+                        ;;
+
+		-H)
+		    REMOTEHOST=$2;
+		    shift;
+		    ;;
+		-C) CHECK=$2;
+		    shift;
+		    ;;
+		-c)
+		    CRITICALNUMBER=$2
+		    shift;
+		    ;;
+		-w)
+		    WARNINGNUMBER=$2;
+		    shift;
+	   	;;
+
+                *)
+                        echo "Unknown argument: $1"
+                        print_usage
+                        exit $STATE_UNKNOWN
+                        ;;
+        esac
+        shift
+done
+
+if [ "$ITEM" = "" ]; then
+ ITEM="TONER"
+fi
+
+
+#### Find out if we can use MIBS or ISO.
+USEISO=`snmpwalk -m ALL -v 2c -c public $REMOTEHOST 2>/dev/null | grep -i "^iso" | head -n 1`
+
+if [ "$USEISO" ]; then
+ SNMPSTATUS1="iso.3.6.1.2.1.43.16.5.1.2.1.1"
+ SNMPSTATUS2="iso.3.6.1.2.1.43.16.5.1.2.1.2"
+ SNMPSTATUS3="iso.3.6.1.2.1.43.16.5.1.2.1.3"
+ SNMPSTATUS4="iso.3.6.1.2.1.43.16.5.1.2.1.4"
+ SNMPNAMECODE="iso.3.6.1.2.1.43.11.1.1.6.1."
+ SNMPTOTALPAGES="iso.3.6.1.2.1.43.11.1.1.8.1."
+ SNMPREMAININGPAGES="iso.3.6.1.2.1.43.11.1.1.9.1."
+ SNMPSTATUS="iso.3.6.1.2.1.43.17.6.1.5.1.1"
+ SNMPMANUHP="iso.3.6.1.2.1.43.9.2.1.8.1.1"
+else
+ SNMPSTATUS1="mib-2.43.16.5.1.2.1.1"
+ SNMPSTATUS2="mib-2.43.16.5.1.2.1.2"
+ SNMPSTATUS3="mib-2.43.16.5.1.2.1.3"
+ SNMPSTATUS4="mib-2.43.16.5.1.2.1.4"
+ SNMPNAMECODE="mib-2.43.11.1.1.6.1."
+ SNMPTOTALPAGES="mib-2.43.11.1.1.8.1."
+ SNMPREMAININGPAGES="mib-2.43.11.1.1.9.1."
+ SNMPSTATUS="mib-2.43.17.6.1.5.1.1"
+ SNMPMANUHP="mib-2.43.9.2.1.8.1.1"
+fi
+
+## Get the Manufacturer
+
+MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST $SNMPMANUHP 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
+
+# Work out if we're using CMYK (Sane) or BCMY (damn you)!
+
+	## There's probably a better way to work this out by querying the printer
+if [ "$MANU" = "Canon" ] || [ "$MANU" = "Hewlett-Packard" ]; then
+#Damn you Canon / HP
+	BLACK=1
+	CYAN=2
+	MAGENTA=3
+	YELLOW=4
+	BLACKDRUM=5
+	CYANDRUM=6
+	MAGENTADRUM=7
+	YELLOWDRUM=8
+else #CMYK
+	CYAN=1
+	MAGENTA=2
+	YELLOW=3
+	BLACK=4
+	CYANDRUM=5
+	MAGENTADRUM=6
+	YELLOWDRUM=7
+	BLACKDRUM=8
+	if [ "$MANU" = "Samsung Electronics" ] || [ "$MANU" = "Xerox" ]; then	
+	## Samsung & Xerox show a percentage of ink remaining, not how many pages - Others probably do, too - and I can probably work this out by querying the printer...
+	 PERC="TRUE"
+	 if [ $CRITICALNUMBER -ge 100 ]; then
+	  CRITICALNUMBER=10
+	 fi
+	 if [ $WARNINGNUMBER -ge 100 ]; then
+	  WARNINGNUMBER=5
+	 fi
+	fi
+fi
+
+## find out if we have a colour printer
+
+if snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPNAMECODE}${CYAN} 2>/dev/null| grep -i "cyan" >/dev/null 2>&1 ; then
+COLOURP=true
+	if [ "$CHECK" = "CYAN" ]; then
+		CHECKCOLOUR=$CYAN
+	elif [ "$CHECK" = "MAGENTA" ]; then
+		CHECKCOLOUR=$MAGENTA
+	elif [ "$CHECK" = "YELLOW" ]; then
+		CHECKCOLOUR=$YELLOW
+	elif [ "$CHECK" = "BLACK" ]; then
+		CHECKCOLOUR=$BLACK
+	elif [ "$CHECK" = "STATUS" ]; then
+		CHECKCOLOUR=0
+	elif [ "$CHECK" = "CYANDRUM" ]; then
+		CHECKCOLOUR=$CYANDRUM
+	elif [ "$CHECK" = "MAGENTADRUM" ]; then
+		CHECKCOLOUR=$MAGENTADRUM
+	elif [ "$CHECK" = "YELLOWDRUM" ]; then
+		CHECKCOLOUR=$YELLOWDRUM
+	elif [ "$CHECK" = "BLACKDRUM" ]; then
+		CHECKCOLOUR=$BLACKDRUM
+	fi
+else
+COLOURP=false
+	if [ "$CHECK" = "CYAN" ]; then
+		echo "NO CYAN TONER"
+		exit 2
+	elif [ "$CHECK" = "MAGENTA" ]; then
+		echo "NO MAGENTA TONER"
+		exit 2
+	elif [ "$CHECK" = "YELLOW" ]; then
+		echo "NO YELLOW TONER"
+		exit 2
+	elif [ "$CHECK" = "BLACK" ]; then
+		CHECKCOLOUR=$BLACK
+	elif [ "$CHECK" = "STATUS" ]; then
+		CHECKCOLOUR=0
+	elif [ "$CHECK" = "CYANDRUM" ]; then
+		echo "NO CYAN DRUM"
+		exit 2
+	elif [ "$CHECK" = "MAGENTADRUM" ]; then
+		echo "NO MAGENTA DRUM"
+		exit 2
+	elif [ "$CHECK" = "YELLOWDRUM" ]; then
+		echo "NO YELLOW DRUM"
+		exit 2
+	elif [ "$CHECK" = "BLACKDRUM" ]; then
+		CHECKCOLOUR=$BLACKDRUM
+	fi
+
+fi
+
+
+
+if [ $CHECKCOLOUR -eq 0 ]; then
+
+	PRINTERSTATUS=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPSTATUS1} 2>/dev/null| sed "s/.*STRING: \(.*\)/\1/;s/\"//g"`
+
+	if echo $PRINTERSTATUS | grep "Load Tray" ; then
+		PAPERTYPE=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPSTATUS2} 2>/dev/null| sed "s/.*STRING: \(.*\)/\1/;s/\"//g"`
+		MSG="Out of paper, ${PRINTERSTATUS} ${PAPERTYPE}"
+		exitstatus=$STATE_CRITICAL
+	elif echo $PRINTERSTATUS | grep -i "jam" ; then
+		MSG="Printer Status: CRITICAL:- Paper Jam"
+		exitstatus=$STATE_CRITICAL
+	else
+		MSG="Printer Status: OK"
+		exitstatus=$STATE_OK
+	fi
+else
+
+	TONERNAME=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPNAMECODE}${CHECKCOLOUR} 2>/dev/null| sed "s/.*STRING: \(.*\)/\1/;s/\"//g"`
+	TOTPAGES=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPTOTALPAGES}${CHECKCOLOUR} 2>/dev/null| sed "s/.*INTEGER: \(.*\)/\1/;s/\"//g"`
+	REMPAGES=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPREMAININGPAGES}${CHECKCOLOUR} 2>/dev/null| sed "s/.*INTEGER: \(.*\)/\1/;s/\"//g"`
+
+	if [ $REMPAGES -le 0 ]; then
+		REMPAGES=0
+	fi
+
+	if [ $REMPAGES -le $CRITICALNUMBER ]; then
+		exitstatus=$STATE_CRITICAL
+		exitmsg="CRITICAL:"
+		TONERMSG="low"
+	elif [ $REMPAGES -ge $WARNINGNUMBER ]; then
+		exitstatus=$STATE_OK
+		exitmsg="OK:"
+		TONERMSG="OK"
+	else
+		exitstatus=$STATE_WARNING
+		exitmsg="WARNING:"
+		TONERMSG="low"
+	fi
+
+	if [ "$PERC" = "TRUE" ]; then
+		MSG="${exitmsg} ${REMPAGES}% remaining on ${TONERNAME}. Status: ${TONERNAME} ${TONERMSG}|${TONERNAME}=${REMPAGES};${WARNINGNUMBER};${CRITICALNUMBER};0;100"
+	else
+		MSG="${exitmsg} ${REMPAGES} of ${TOTPAGES} pages remaining on ${TONERNAME}. Status: ${TONERNAME} ${TONERMSG}|${TONERNAME}=${REMPAGES};${WARNINGNUMBER};${CRITICALNUMBER};;"
+	fi
+
+fi
+
+## Show the message and exit with the Nagios exit code
+echo $MSG
+
+exit $exitstatus

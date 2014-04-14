@@ -1,0 +1,263 @@
+#!/bin/bash
+#
+#    Program : check_asterisk_ami
+#            :
+#     Author : Jason Rivers <jason@jasonrivers.co.uk>
+#            :
+#    Purpose : Nagios plugin to return Information from an Asterisk host using AMI
+#            :
+# Parameters : --help
+#            : --version
+#            :
+#    Returns : Standard Nagios status_* codes as defined in utils.sh
+#            :
+#    Licence : GPL
+#
+#      Notes : See --help for details
+#============:==============================================================
+
+PROGNAME=`basename $0`
+PROGPATH=`echo $0 | /bin/sed -e 's,[\\/][^\\/][^\\/]*$,,'`
+REVISION=`echo '$Revision: 1.2.0.0 $' | sed -e 's/[^0-9.]//g'`
+
+
+. $PROGPATH/utils.sh
+
+print_usage() {
+        echo "Usage: $PROGNAME [-H hostname] [-q query] [-u username] [-p password] [-P port] [-w warning] [-c critical]"
+	echo "		-H	Hostname"
+        echo "		-q	Command to query"
+        echo "		-u	AMI Username"
+        echo "		-p	AMI Password"
+        echo "		-P	(optional) AMI PORT"
+        echo "		-w	(optional) warning threshold"
+        echo "		-c	(optional) critical threshold"
+	echo ""
+        echo "SupportedCommands:"
+        echo "			channels	(check number of current channels in-use)"
+        echo "			calls		(check number of current calls)"
+        echo "			sippeers	(check number of current calls)"
+        echo "			iaxpeers	(check number of current calls)"
+	echo ""
+        echo "Usage: $PROGNAME --help"
+        echo "Usage: $PROGNAME --version"
+}
+
+print_help() {
+        print_revision $PROGNAME $REVISION
+        echo ""
+        echo "Nagios Plugin to check Asterisk using AMI"
+        echo ""
+        print_usage
+        echo ""
+        echo "Asterisk Call Status Check. © Jason Rivers 2011"
+        echo ""
+        exit 0
+#        support
+}
+
+
+
+
+# If we have arguments, process them.
+#
+exitstatus=$STATE_WARNING #default
+while test -n "$1"; do
+        case "$1" in
+                --help)
+                        print_help
+                        exit $STATE_OK
+                        ;;
+                -h)
+                        print_help
+                        exit $STATE_OK
+                        ;;
+                --version)
+                        print_revision $PROGNAME $REVISION
+                        exit $STATE_OK
+                        ;;
+                -V)
+                        print_revision $PROGNAME $REVISION
+                        exit $STATE_OK
+                        ;;
+
+                -H)
+                    REMOTEHOST=$2;
+                    shift;
+                    ;;
+                -P) AMIPORT=$2;
+                    shift;
+                    ;;
+                -u) AMIUSER=$2;
+                    shift;
+                    ;;
+                -p) AMIPASS=$2;
+                    shift;
+                    ;;
+                -q) CHECK=$2;
+                    shift;
+                    ;;
+                -c)
+                    CRITICALNUMBER=$2
+                    shift;
+                    ;;
+                -w)
+                    WARNINGNUMBER=$2;
+                    shift;
+                ;;
+
+                *)
+                        echo "Unknown argument: $1"
+                        print_usage
+                        exit $STATE_UNKNOWN
+                        ;;
+        esac
+        shift
+done
+
+##Find netcat
+if [ -f /usr/bin/nc ]; then
+	NC=/usr/bin/nc 
+elif [ -f /bin/nc ]; then
+	NC=/bin/nc
+elif [ -f /usr/bin/netcat ]; then
+	NC=/usr/bin/netcat
+elif [ -f /bin/netcat ]; then
+	NC=/bin/netcat
+else
+	echo "Couldn't find Netcat on your system, Please install the netcat package:"
+	echo ""
+	echo "for RedHat based distros use: yum install nc"
+	echo "for Debian based distros use: apt-get install netcat"
+	exit $STATE_CRITICAL
+fi
+
+if [ "${AMIPORT}" = "" ]; then
+	AMIPORT="5038"
+fi
+
+if [ "${CHECK}" = "channels" ]; then
+##WARNING
+if [ "$WARNINGNUMBER" = "" ]; then
+WARNINGNUMBER=10
+fi
+if [ "$CRITICALNUMBER" = "" ]; then
+CRITICALNUMBER=20
+fi
+	## Checking active chanels on Asterisk
+
+	CHANNELS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: CoreShowChannels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} $REMOTEHOST ${AMIPORT} | awk '/^ListItems/ {print $2}'|tr -d "\r"`
+
+	
+	if [ "$CHANNELS" = "" ]; then
+		echo "UNKNOWN: Unable to get number of Channels"
+		exit $STATUS_UNKNOWN
+	fi
+
+	if [ $CHANNELS -lt $WARNINGNUMBER ]; then
+		exitstatus=$STATU_OK
+		MSG="OK: ${CHANNELS} Asterisk calls active|channels=${CHANNELS}"
+	elif [ $CHANNELS -lt $CRITICALNUMBER ]; then
+		exitstatus=$STATU_WARNING
+		MSG="WARNING: ${CHANNELS} Asterisk calls active|channels=${CHANNELS}"
+	elif [ $CHANNELS -ge $CRITICALNUMBER ]; then
+		exitstatus=$STATU_CRITICAL
+		MSG="CRITICAL: ${CHANNELS} Asterisk calls active|channels=${CHANNELS}"
+	fi
+
+elif [ "${CHECK}" = "calls" ]; then
+##WARNING
+if [ "$WARNINGNUMBER" = "" ]; then
+WARNINGNUMBER=5
+fi
+if [ "$CRITICALNUMBER" = "" ]; then
+CRITICALNUMBER=10
+fi
+	CALLS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: Core Show Channels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/active call/ {print $1}' | tr -d "\r"`
+
+	if [ "$CALLS" = "" ]; then
+		echo "UNKNOWN: Unable to get number of calls"
+		exit $STATUS_UNKNOWN
+	fi
+
+        if [ $CALLS -lt $WARNINGNUMBER ]; then
+                exitstatus=$STATE_OK
+                MSG="OK: ${CALLS} Asterisk calls active|calls=${CALLS}"
+        elif [ $CALLS -lt $CRITICALNUMBER ]; then
+                exitstatus=$STATE_WARNING
+                MSG="WARNING: ${CALLS} Asterisk calls active|calls=${CALLS}"
+        elif [ $CALLS -ge $CRITICALNUMBER ]; then
+                exitstatus=$STATE_CRITICAL
+                MSG="CRITICAL: ${CALLS} Asterisk calls active|calls=${CALLS}"
+        fi
+if [ "$CALLS" = "" ]; then
+	CALLS=0
+fi
+elif [ "${CHECK}" = "iaxpeers" ]; then
+
+##WARNING
+if [ "$WARNINGNUMBER" = "" ]; then
+WARNINGNUMBER=5
+fi
+if [ "$CRITICALNUMBER" = "" ]; then
+CRITICALNUMBER=10
+fi
+
+	IAXpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: iax2 show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/online/ {print $0}' | tr -d "\r"`
+ONLINE=`echo $IAXpeers | sed 's/.*\[\(.*\) online.*unmonitored.*/\1/'`
+OFFLINE=`echo $IAXpeers | sed 's/.*online, \(.*\) offline.*unmonitored.*/\1/'`
+
+	if [ "$OFFLINE" = "" ]; then
+		echo "UNKNOWN: Unable to get number of IAX Peers"
+		exit $STATUS_UNKNOWN
+	fi
+
+        if [ $OFFLINE -lt $WARNINGNUMBER ]; then
+                exitstatus=$STATE_OK
+                MSG="OK: ${ONLINE} online, ${OFFLINE} offline IAX2 peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $OFFLINE -lt $CRITICALNUMBER ]; then
+                exitstatus=$STATE_WARNING
+                MSG="WARNING: ${ONLINE} online, ${OFFLINE} offline IAX2 peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $OFFLINE -ge $CRITICALNUMBER ]; then
+                exitstatus=$STATE_CRITICAL
+                MSG="CRITICAL: ${ONLINE} online, ${OFFLINE} offline IAX2 peers|online=${ONLINE} offline=${OFFLINE}"
+        fi
+
+elif [ "${CHECK}" = "sippeers" ]; then
+
+##WARNING
+if [ "$WARNINGNUMBER" = "" ]; then
+WARNINGNUMBER=5
+fi
+if [ "$CRITICALNUMBER" = "" ]; then
+CRITICALNUMBER=10
+fi
+
+	SIPpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: sip show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/online/ {print $0}' | tr -d "\r"`
+ONLINE=`echo $SIPpeers | sed 's/.*Monitored: \(.*\) online.*Unmonitored.*/\1/'`
+OFFLINE=`echo $SIPpeers | sed 's/.*online, \(.*\) offline.*Unmonitored.*/\1/'`
+
+	if [ "$OFFLINE" = "" ]; then
+		echo "UNKNOWN: Unable to get number of SIP Peers"
+		exit $STATUS_UNKNOWN
+	fi
+
+        if [ $OFFLINE -lt $WARNINGNUMBER ]; then
+                exitstatus=$STATE_OK
+                MSG="OK: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $OFFLINE -lt $CRITICALNUMBER ]; then
+                exitstatus=$STATE_WARNING
+                MSG="WARNING: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $OFFLINE -ge $CRITICALNUMBER ]; then
+                exitstatus=$STATE_CRITICAL
+                MSG="CRITICAL: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        fi
+
+else
+	echo="CRITICAL: Unknown command"
+	print_help
+	exit=$STATE_CRITICAL
+fi
+
+echo $MSG
+exit $exitstatus
