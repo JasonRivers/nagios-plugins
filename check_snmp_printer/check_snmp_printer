@@ -56,6 +56,12 @@ print_help() {
 # If we have arguments, process them.
 #
 exitstatus=$STATE_WARNING #default
+### Defaults
+
+ISCOLOUR=false ## Default
+CRITICALNUMBER=10
+WARNINGNUMBER=20
+CHECK="BLACK" ## Black Toner by default
 while test -n "$1"; do
         case "$1" in
                 --help)
@@ -118,6 +124,7 @@ if [ "$USEISO" ]; then
  SNMPREMAININGPAGES="iso.3.6.1.2.1.43.11.1.1.9.1."
  SNMPSTATUS="iso.3.6.1.2.1.43.17.6.1.5.1.1"
  SNMPMANUHP="iso.3.6.1.2.1.43.9.2.1.8.1.1"
+ SNMPSTRING="iso.3.6.1.2.1.43.11.1.1.6.1."
 else
  SNMPSTATUS1="mib-2.43.16.5.1.2.1.1"
  SNMPSTATUS2="mib-2.43.16.5.1.2.1.2"
@@ -128,11 +135,18 @@ else
  SNMPREMAININGPAGES="mib-2.43.11.1.1.9.1."
  SNMPSTATUS="mib-2.43.17.6.1.5.1.1"
  SNMPMANUHP="mib-2.43.9.2.1.8.1.1"
+ SNMPSTRING="mib-2.43.11.1.1.6.1."
 fi
 
 ## Get the Manufacturer
 
 MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST $SNMPMANUHP 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
+STR2=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPSTRING}2 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
+
+if [ "`echo $STR2 | grep -i cyan`" ] || [ "`echo $STR2 | grep -i magenta`" ]; then
+    ISCOLOUR=true
+fi
+
 
 # Work out if we're using CMYK (Sane) or BCMY (damn you)!
 
@@ -140,22 +154,20 @@ MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST $SNMPMANUHP 2>/dev/null | sed "
 if [ "$MANU" = "Canon" ] || [ "$MANU" = "Hewlett-Packard" ]; then
 #Damn you Canon / HP
 	BLACK=1
-	CYAN=2
-	MAGENTA=3
-	YELLOW=4
-	BLACKDRUM=5
-	CYANDRUM=6
-	MAGENTADRUM=7
-	YELLOWDRUM=8
+    if [ "$ISCOLOUR" = "true" ]; then
+        CYAN=2
+        MAGENTA=3
+        YELLOW=4
+        MAINTKIT=5
+    else
+        MAINTKIT=2
+    fi
 else #CMYK
 	CYAN=1
 	MAGENTA=2
 	YELLOW=3
 	BLACK=4
-	CYANDRUM=5
-	MAGENTADRUM=6
-	YELLOWDRUM=7
-	BLACKDRUM=8
+    MAINTKIT=5
 	if [ "$MANU" = "Samsung Electronics" ] || [ "$MANU" = "Xerox" ]; then	
 	## Samsung & Xerox show a percentage of ink remaining, not how many pages - Others probably do, too - and I can probably work this out by querying the printer...
 	 PERC="TRUE"
@@ -182,14 +194,8 @@ COLOURP=true
 		CHECKCOLOUR=$BLACK
 	elif [ "$CHECK" = "STATUS" ]; then
 		CHECKCOLOUR=0
-	elif [ "$CHECK" = "CYANDRUM" ]; then
-		CHECKCOLOUR=$CYANDRUM
-	elif [ "$CHECK" = "MAGENTADRUM" ]; then
-		CHECKCOLOUR=$MAGENTADRUM
-	elif [ "$CHECK" = "YELLOWDRUM" ]; then
-		CHECKCOLOUR=$YELLOWDRUM
-	elif [ "$CHECK" = "BLACKDRUM" ]; then
-		CHECKCOLOUR=$BLACKDRUM
+	elif [ "$CHECK" = "MAINTENANCE" ]; then
+		CHECKCOLOUR=$MAINTKIT
 	fi
 else
 COLOURP=false
@@ -206,17 +212,10 @@ COLOURP=false
 		CHECKCOLOUR=$BLACK
 	elif [ "$CHECK" = "STATUS" ]; then
 		CHECKCOLOUR=0
-	elif [ "$CHECK" = "CYANDRUM" ]; then
-		echo "NO CYAN DRUM"
-		exit 2
-	elif [ "$CHECK" = "MAGENTADRUM" ]; then
-		echo "NO MAGENTA DRUM"
-		exit 2
-	elif [ "$CHECK" = "YELLOWDRUM" ]; then
-		echo "NO YELLOW DRUM"
-		exit 2
 	elif [ "$CHECK" = "BLACKDRUM" ]; then
 		CHECKCOLOUR=$BLACKDRUM
+	elif [ "$CHECK" = "MAINTENANCE" ]; then
+		CHECKCOLOUR=$MAINTKIT
 	fi
 
 fi
