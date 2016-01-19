@@ -1,0 +1,47 @@
+#!/bin/bash
+set -x
+
+
+while test -n "$1"; do
+        case "$1" in
+                --help|-h)
+                        print_help
+                        exit $STATE_OK
+                        ;;
+                --version|-V)
+                        print_revision $PROGNAME $REVISION
+                        exit $STATE_OK
+                        ;;
+                -u) SMSUSER=$2;
+                    shift;
+                    ;;
+                -p) SMSPASS=$2;
+                    shift;
+                    ;;
+                *)
+                        echo "Unknown argument: $1"
+                        print_usage
+                        exit $STATE_UNKNOWN
+                        ;;
+        esac
+        shift
+done
+
+
+if [ $NAGIOS_SERVICEDESC ]; then
+	## This is a service notification
+	MESSAGE="${NAGIOS_NOTIFICATIONTYPE}: ${NAGIOS_SERVICEDESC} on ${NAGIOS_HOSTNAME} is ${NAGIOS_SERVICESTATE}: ${NAGIOS_SERVICEOUTPUT} (${NAGIOS_SHORTDATETIME})"
+else
+	## This is a host notification
+	MESSAGE="${NAGIOS_NOTIFICATIONTYPE}: ${NAGIOS_HOSTNAME} is ${NAGIOS_HOSTSTATE}: ${NAGIOS_HOSTOUTPUT} (${NAGIOS_SHORTDATETIME})"
+fi
+
+if [ ${NAGIOS_CONTACTPAGER} ]; then
+
+	curl --silent --get --form-string username=${SMSUSER} --form-string password=${SMSPASS} --form-string destination=${NAGIOS_CONTACTPAGER} --form-string message="$MESSAGE" http://sms.aaisp.net.uk/sms.cgi
+
+else
+	echo "ERROR: Contact doesn't have CONTACTPAGER defined"
+	exit 1
+fi
+
