@@ -18,8 +18,6 @@
 # Shamelessly stolen from other Nagios plugins.
 #
 
-set -x
-
 PROGNAME=`basename $0`
 PROGPATH=`echo $0 | /bin/sed -e 's,[\\/][^\\/][^\\/]*$,,'`
 REVISION=`echo '$Revision: 1.3.0.0 $' | sed -e 's/[^0-9.]//g'`
@@ -130,8 +128,10 @@ fi
 
 
 #### Find out if we can use MIBS or ISO.
-USEISO=`snmpwalk -m ALL -v 2c -c public $REMOTEHOST 2>/dev/null | grep -i "^iso" | head -n 1`
-USEPMIB=`snmpwalk -m ALL -v 2c -c public $REMOTEHOST 2>/dev/null | grep -i "^Printer-MIB" | head -n 1`
+SNMPRES=`snmpget -m ALL -v 2c -c public $REMOTEHOST iso.3.6.1.2.1.43.9.2.1.8.1.1 2>/dev/null` 
+
+USEISO=`echo $SNMPRES | grep -i "^iso" | head -n 1`
+USEPMIB=`echo $SNMPRES | grep -i "^Printer-MIB" | head -n 1`
 
 if [ "$USEPMIB" ]; then
  SNMPSUPPYSTRING="Printer-MIB::prtMarkerSuppliesDescription.1."
@@ -139,7 +139,7 @@ if [ "$USEPMIB" ]; then
  SNMPTOTALPAGES="Printer-MIB::prtMarkerSuppliesMaxCapacity.1."
  SNMPREMAININGPAGES="Printer-MIB::prtMarkerSuppliesLevel.1."
  SNMPSTATUS="Printer-MIB::prtConsoleDescription.1.2"
- SNMPMANUHP="Printer-MIB::prtInputVendorName.1.1"
+ SNMPMANU="Printer-MIB::prtInputVendorName.1.1"
 elif [ "$USEISO" ]; then
  SNMPSTATUS1="iso.3.6.1.2.1.43.16.5.1.2.1.1"
  SNMPSTATUS2="iso.3.6.1.2.1.43.16.5.1.2.1.2"
@@ -150,7 +150,7 @@ elif [ "$USEISO" ]; then
  SNMPTOTALPAGES="iso.3.6.1.2.1.43.11.1.1.8.1."
  SNMPREMAININGPAGES="iso.3.6.1.2.1.43.11.1.1.9.1."
  SNMPSTATUS="iso.3.6.1.2.1.43.17.6.1.5.1.1"
- SNMPMANUHP="iso.3.6.1.2.1.43.9.2.1.8.1.1"
+ SNMPMANU="iso.3.6.1.2.1.43.9.2.1.8.1.1"
 else
  SNMPSTATUS1="mib-2.43.16.5.1.2.1.1"
  SNMPSTATUS2="mib-2.43.16.5.1.2.1.2"
@@ -161,12 +161,12 @@ else
  SNMPTOTALPAGES="mib-2.43.11.1.1.8.1."
  SNMPREMAININGPAGES="mib-2.43.11.1.1.9.1."
  SNMPSTATUS="mib-2.43.17.6.1.5.1.1"
- SNMPMANUHP="mib-2.43.9.2.1.8.1.1"
+ SNMPMANU="mib-2.43.9.2.1.8.1.1"
 fi
 
 ## Get the Manufacturer
 
-MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPMANUHP} 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
+MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPMANU} 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
 STR2=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPSUPPYSTRING}2 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
 
 
