@@ -1,0 +1,142 @@
+#!/usr/bin/perl -w
+
+# released under the terms of the GNU General Public License v2
+# Copyright 2007 Andrew Elwell.
+
+use strict;
+use Net::XMPP;
+use Getopt::Std;
+
+## Configuration defaults
+my $xmpp_username = '';
+my $xmpp_password = '';
+my $xmpp_resource = 'NagiosCore';
+my $xmpp_server = '';
+my $xmpp_port = 5222;
+my $xmpp_componentname = '';
+my $xmpp_connectiontype = 'tcpip';
+my $xmpp_tls = 1;
+## End of configuration
+
+
+
+## Check arguments
+
+my $opts = {};
+
+getopts( 'hu:p:r:s:P:c:t:T:', $opts );
+
+if ( $opts->{h} ) {
+        showUsage();
+}
+if ( $opts->{u} ) {
+        $xmpp_username = $opts->{u};
+} else {
+        showUsage();
+}
+if ( $opts->{p} ) {
+        $xmpp_password = $opts->{p};
+} else {
+        showUsage();
+}
+if ( $opts->{r} ) {
+        $xmpp_resource = $opts->{r};
+}
+if ( $opts->{s} ) {
+        $xmpp_server = $opts->{s};
+} else {
+        showUsage();
+}
+if ( $opts->{P} ) {
+        $xmpp_port = $opts->{P};
+}
+if ( $opts->{c} ) {
+	$xmpp_componentname = $opts->{c};
+}
+if ( $opts->{T} ) {
+        $xmpp_connectiontype = $opts->{T};
+}
+
+if ( $opts->{t} ) {
+        $xmpp_tls = $opts->{t};
+}
+my $xmpp_msgto = $ENV{NAGIOS_CONTACTEMAIL} || die "You must set CONTACTEMAIL for the user to use this script\n";
+
+## End of Arguments
+
+sub showUsage {
+        if ( $_ = shift ) { print "Error: $_\n"}
+        print "$0 \n";
+        print "Licence: MIT\n";
+        print "Copyright 2016 Jason Rivers\n\n";
+        print "Usage: notify_by_xmpp [Options]\n\n";
+	print "Options:\n\n";
+	print "	-h	shows this help\n";
+	print "	-u	xmpp username\n";
+	print "	-p	xmpp password\n";
+	print "	-r	xmpp resource\n";
+	print "	-s	xmpp server\n";
+	print "	-c	xmpp component name (eg domain of your username)\n";
+	print "	-P	xmpp port number (default 5222)\n";
+	print "	-T	connection type (default tcpip) \n";
+	print "	-t	use TLS (default 1)\n\n";
+	print "Example:\n";
+	print "notify-by-xmpp -u nagios -p NagiosPassword -s xmpp.example.com -c example.com\n\n";
+        print "Uses Nagios environment variables to send XMPP message\n\n";
+	print "Nagios environment variables used:\n";
+	print "NAGIOS_CONTACTEMAIL\n";
+	print "NAGIOS_NOTIFICATIONTYPE\n";
+	print "NAGIOS_SERVICEOUTPUT\n";
+	print "NAGIOS_SERVICEDESC\n";
+	print "NAGIOS_SERVICESTATE\n";
+	print "NAGIOS_HOSTNAME\n";
+	print "NAGIOS_SHORTDATETIME\n";
+
+        exit (0);
+}
+
+## Construct Text for message
+
+my $xmpp_text="";
+
+if ( $ENV{NAGIOS_SERVICEDESC} ) {
+        $xmpp_text = "$ENV{NAGIOS_NOTIFICATIONTYPE}: $ENV{NAGIOS_SERVICEDESC} on $ENV{NAGIOS_HOSTNAME} is $ENV{NAGIOS_SERVICESTATE}: $ENV{NAGIOS_SERVICEOUTPUT} ($ENV{NAGIOS_SHORTDATETIME})";
+} else {
+        $xmpp_text = "$ENV{NAGIOS_NOTIFICATIONTYPE}: $ENV{NAGIOS_HOSTNAME} is $ENV{NAGIOS_HOSTSTATE}: $ENV{NAGIOS_HOSTOUTPUT} ($ENV{NAGIOS_SHORTDATETIME})";
+}
+
+#------------------------------------
+
+my $Connection = new Net::XMPP::Client();
+
+my $status = $Connection->Connect(
+       hostname => $xmpp_server, port => $xmpp_port,
+       componentname => $xmpp_componentname,
+       connectiontype => $xmpp_connectiontype, tls => $xmpp_tls);
+
+if (!(defined($status))) {
+   print "ERROR:  XMPP connection failed.\n";
+   print "        ($!)\n";
+   exit(0);
+}
+
+my $sid = $Connection->{SESSION}->{id};
+$Connection->{STREAM}->{SIDS}->{$sid}->{hostname} = $xmpp_componentname;
+
+my @result = $Connection->AuthSend(
+       username => $xmpp_username, password => $xmpp_password,
+       resource => $xmpp_resource);
+
+if ($result[0] ne "ok") {
+   print "ERROR: Authentication failed: $result[0] - $result[1]\n";
+   exit(0);
+}
+
+# Send messages
+$Connection->MessageSend(
+        to       => "$xmpp_msgto",
+        resource => $xmpp_resource,
+        type     => "chat",
+        body     => $xmpp_text);
+
+$Connection->Disconnect();
