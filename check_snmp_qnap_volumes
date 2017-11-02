@@ -1,0 +1,122 @@
+#!/bin/bash
+#
+#    Program : check_snmp_qnap_disks
+#            :
+#     Author : Jason Rivers <jason@jasonrivers.co.uk>
+#            :
+#    Purpose : Nagios plugin to return Information about Disks in a QNAP NAS
+#            :
+# Parameters : --help
+#            : --version
+#            :
+#    Returns : Standard Nagios status_* codes
+#            :
+#    Licence : GPL
+#
+#      Notes : See --help for details
+#============:==============================================================
+
+#set -x
+
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+
+EXITCODE=$STATE_UNKNOWN
+
+OID_NUMBER_OF_VOLUMES=".1.3.6.1.4.1.24681.1.2.16.0"
+
+OID_MODEL_NUMBER=".1.3.6.1.4.1.24681.1.2.12"
+OID_VOLUMES=".1.3.6.1.4.1.24681.1.2.17"
+OID_VOLUMES_SIZE=".1.3.6.1.4.1.24681.1.2.17.1.4"
+OID_VOLUMES_FREE=".1.3.6.1.4.1.24681.1.2.17.1.5"
+OID_VOLUMES_NAME=".1.3.6.1.4.1.24681.1.2.17.1.2"
+
+SNMPWALK=/usr/bin/snmpwalk
+SNMPGET=/usr/bin/snmpget
+SNMP_COMMUNITY="public"
+SNMP_VERSION="2c"
+WARNING=45
+CRITICAL=50
+
+while getopts H:v:C:w:c:hV OPT
+do
+  case "$OPT" in
+    H) REMOTE_HOSTNAME="$OPTARG" ;;
+    v) SNMP_VERSION="$OPTARG" ;;
+    C) SNMP_COMMUNITY="$OPTARG" ;;
+    w) WARNING=$OPTARG ;;
+    c) CRITICAL=$OPTARG ;;
+    h) print_help
+       exit "$STATE_UNKNOWN" ;;
+    V) print_version
+       exit "$STATE_UNKNOWN";;
+   esac
+done
+
+
+
+TOTAL_VOLUMES=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME $OID_NUMBER_OF_VOLUMES -Oav | sed 's/INTEGER: //'`
+VOLUME=1
+
+
+echo "DEBUG: TOTAL_VOLUMES: $TOTAL_VOLUMES"
+
+while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
+	VOLUME_NAME=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_NAME}.${VOLUME} -Oav | sed 's/STRING: "\[//;s/\]"//'`
+	VOLUME_SIZE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_SIZE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
+	VOLUME_FREE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_FREE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
+
+	## ignore dumb volumes
+	if ! [ "${VOLUME_SIZE}" = "0.00 KB" ]; then
+		SIZE_COMP=$(echo ${VOLUME_SIZE} | awk '{print $NF}')
+
+		case $SIZE_COMP in
+			"TB")
+				;;
+			"GB")
+				;;
+			"MB")
+				;;
+			"KB")
+				;;
+		esac
+		echo "DEBUG: VOLUME_NAME: ${VOLUME_NAME}"
+		echo "DEBUG: VOLUME_SIZE: ${VOLUME_SIZE}"
+		echo "DEBUG: VOLUME_FREE: ${VOLUME_FREE}"
+	else
+		echo "DEBUG: IGNORING ${VOLUME_NAME}"
+	fi
+	
+	let VOLUME=${VOLUME}+1
+
+
+done
+
+exit 0
+
+if ! [ $EXITCODE = $STATE_CRITICAL ];then
+	if [ $EXITCODE = $STATE_UNKNOWN ]; then
+		if [ $DISK_TEMP -ge $WARNING ]; then
+			EXITCODE=$STATE_WARNING
+			EXITMSG="WARNING: Disk Temperature is $DISK_TEMP"
+		fi
+	fi
+
+	if [ $DISK_TEMP -ge $CRITICAL ]; then
+		EXITCODE=$STATE_CRITICAL
+		EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
+	fi
+	if ! [ "$DISK_STATUS" = "GOOD" ]; then
+		EXITCODE=$STATE_CRITICAL
+		EXITMSG="CRITICAL: Disk has status $DISK_STATUS"
+	fi
+fi
+
+PERFDATA="${PERFDATA}Disk${DISK_COUNTER}_temperature=$DISK_TEMP "
+
+echo "${EXITMSG}|${PERFDATA}"
+exit $EXITCODE
+
+
