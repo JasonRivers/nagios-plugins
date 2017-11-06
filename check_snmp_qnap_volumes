@@ -115,9 +115,9 @@ while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
 		fi
 
 		if [ "$PERFDATA" = "" ]; then
-			PERFDATA="${VOLUME_NAME}=${VOLUME_PERCENT_USED}"
+			PERFDATA="${VOLUME_NAME}=${VOLUME_PERCENT_USED}%"
 		else
-			PERFDATA="${PERFDATA}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED}"
+			PERFDATA="${PERFDATA}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED}%"
 		fi
 	else
 		if [ "$DEBUG" ]; then
@@ -146,7 +146,7 @@ if [ "$DEBUG" ]; then
 	echo "exiting with $EXITCODE"
 fi
 
-echo "${EXITMSG} | ${PERFDATA}"
+echo "${EXITMSG} ${PERFDATA} | ${PERFDATA}"
 exit $EXITCODE
 
 
