@@ -37,10 +37,10 @@ SNMPWALK=/usr/bin/snmpwalk
 SNMPGET=/usr/bin/snmpget
 SNMP_COMMUNITY="public"
 SNMP_VERSION="2c"
-WARNING=45
-CRITICAL=50
+WARNING=20
+CRITICAL=10
 
-while getopts H:v:C:w:c:hV OPT
+while getopts H:v:C:w:c:hV:D OPT
 do
   case "$OPT" in
     H) REMOTE_HOSTNAME="$OPTARG" ;;
@@ -52,6 +52,7 @@ do
        exit "$STATE_UNKNOWN" ;;
     V) print_version
        exit "$STATE_UNKNOWN";;
+    D) DEBUG=true ;;
    esac
 done
 
@@ -60,33 +61,68 @@ done
 TOTAL_VOLUMES=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME $OID_NUMBER_OF_VOLUMES -Oav | sed 's/INTEGER: //'`
 VOLUME=1
 
-
-echo "DEBUG: TOTAL_VOLUMES: $TOTAL_VOLUMES"
+if [ "$DEBUG" ]; then
+	echo "DEBUG: TOTAL_VOLUMES: $TOTAL_VOLUMES"
+fi
 
 while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
-	VOLUME_NAME=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_NAME}.${VOLUME} -Oav | sed 's/STRING: "\[//;s/\]"//'`
+	VOLUME_NAME=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_NAME}.${VOLUME} -Oav | sed 's/STRING: "\[//;s/\]"//;s/,//' | awk '{print $2}'`
 	VOLUME_SIZE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_SIZE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 	VOLUME_FREE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_FREE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 
 	## ignore dumb volumes
 	if ! [ "${VOLUME_SIZE}" = "0.00 KB" ]; then
 		SIZE_COMP=$(echo ${VOLUME_SIZE} | awk '{print $NF}')
+		VOLUME_SIZE=$(echo $VOLUME_SIZE | awk '{print $1}')
+		VOLUME_FREE=$(echo $VOLUME_FREE | awk '{print $1}')
 
 		case $SIZE_COMP in
 			"TB")
+				VOLUME_SIZE=$(echo "$VOLUME_SIZE * 1024 * 1024" | bc )
+				VOLUME_FREE=$(echo "$VOLUME_FREE * 1024 * 1024" | bc )
+				VOLUME_USED=$(echo "$VOLUME_SIZE - $VOLUME_FREE" | bc)
 				;;
 			"GB")
+				VOLUME_SIZE=$(echo "$VOLUME_SIZE * 1024" | bc )
+				VOLUME_FREE=$(echo "$VOLUME_FREE * 1024" | bc )
+				VOLUME_USED=$(echo "$VOLUME_SIZE - $VOLUME_FREE" | bc)
 				;;
 			"MB")
 				;;
 			"KB")
 				;;
 		esac
-		echo "DEBUG: VOLUME_NAME: ${VOLUME_NAME}"
-		echo "DEBUG: VOLUME_SIZE: ${VOLUME_SIZE}"
-		echo "DEBUG: VOLUME_FREE: ${VOLUME_FREE}"
+		VOLUME_PERCENT_USED=$(awk "BEGIN { pc=100*${VOLUME_USED}/${VOLUME_SIZE}; i=int(pc); print (pc-i<0.5)?i:i+1 }")
+		VOLUME_PERCENT_FREE=$(awk "BEGIN { pc=100*${VOLUME_FREE}/${VOLUME_SIZE}; i=int(pc); print (pc-i<0.5)?i:i+1 }")
+		if ! [ "$EXITCODE" = "$STATE_CRITICAL" ]; then
+			if [ $VOLUME_PERCENT_FREE -le $WARNING ]; then
+				EXITCODE=$STATE_WARNING
+			fi
+			if [ $VOLUME_PERCENT_FREE -le $CRITICAL ]; then
+				EXITCODE=$STATE_CRITICAL
+			fi
+		fi
+
+		
+		if [ "$DEBUG" ]; then
+
+			echo "DEBUG: VOLUME_NAME: ${VOLUME_NAME}"
+			echo "DEBUG: VOLUME_SIZE: ${VOLUME_SIZE}"
+			echo "DEBUG: VOLUME_FREE: ${VOLUME_FREE}"
+			echo "DEBUG: VOLUME_USED: ${VOLUME_USED}"
+			echo "DEBUG: VOLUME_PERCENT_USED: ${VOLUME_PERCENT_USED}"
+			echo "DEBUG: VOLUME_PERCENT_FREE: ${VOLUME_PERCENT_FREE}"
+		fi
+
+		if [ "$PERFDATA" = "" ]; then
+			PERFDATA="${VOLUME_NAME}=${VOLUME_PERCENT_USED}"
+		else
+			PERFDATA="${PERFDATA}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED}"
+		fi
 	else
-		echo "DEBUG: IGNORING ${VOLUME_NAME}"
+		if [ "$DEBUG" ]; then
+			echo "DEBUG: IGNORING ${VOLUME_NAME}"
+		fi
 	fi
 	
 	let VOLUME=${VOLUME}+1
@@ -94,27 +130,21 @@ while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
 
 done
 
-exit 0
-
-if ! [ $EXITCODE = $STATE_CRITICAL ];then
-	if [ $EXITCODE = $STATE_UNKNOWN ]; then
-		if [ $DISK_TEMP -ge $WARNING ]; then
-			EXITCODE=$STATE_WARNING
-			EXITMSG="WARNING: Disk Temperature is $DISK_TEMP"
-		fi
-	fi
-
-	if [ $DISK_TEMP -ge $CRITICAL ]; then
-		EXITCODE=$STATE_CRITICAL
-		EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
-	fi
-	if ! [ "$DISK_STATUS" = "GOOD" ]; then
-		EXITCODE=$STATE_CRITICAL
-		EXITMSG="CRITICAL: Disk has status $DISK_STATUS"
-	fi
+if [ $EXITCODE = $STATE_WARNING ];then
+	EXITCODE=$STATE_WARNING
+	EXITMSG="WARNING: Volume usage"
+elif [ $EXITCODE = $STATE_CRITICAL ];then
+	EXITCODE=$STATE_CRITICAL
+	EXITMSG="CRITICAL: Volume usage"
+else 
+	EXITCODE=$STATE_OK
+	EXITMSG="OK: Volume usage"
 fi
 
-PERFDATA="${PERFDATA}Disk${DISK_COUNTER}_temperature=$DISK_TEMP "
+if [ "$DEBUG" ]; then
+	echo "DEBUG: PERFDATA: ${PERFDATA}"
+	echo "exiting with $EXITCODE"
+fi
 
 echo "${EXITMSG}|${PERFDATA}"
 exit $EXITCODE
