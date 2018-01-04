@@ -1,7 +1,13 @@
 #!/usr/bin/perl -w
-
+# script for nagios notify via Jabber / Google Talk Instant Messaging
+#   using XMPP protocol and SASL PLAIN authentication.
+#
+# author: Jason Rivers <jason@jasonrivers.co.uk>
+# based on work by Andrew Elwell <A.Elwell@physics.gla.ac.uk>
+# based on work by Thus0 <Thus0@free.fr> and  David Cox
+#
 # released under the terms of the GNU General Public License v2
-# Copyright 2007 Andrew Elwell.
+# Copyright 2018 Jason Rivers
 
 use strict;
 use Net::XMPP;
