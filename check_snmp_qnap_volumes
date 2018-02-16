@@ -67,6 +67,11 @@ fi
 
 while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
 	VOLUME_NAME=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_NAME}.${VOLUME} -Oav | sed 's/STRING: "\[//;s/\]"//;s/,//' | awk '{print $2}'`
+	if [ "${VOLUME_NAME}" = "DataVol3" ]; then
+		set -x
+	else
+		set +x
+	fi
 	VOLUME_SIZE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_SIZE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 	VOLUME_FREE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_FREE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 
@@ -115,9 +120,11 @@ while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
 		fi
 
 		if [ "$PERFDATA" = "" ]; then
-			PERFDATA="${VOLUME_NAME}=${VOLUME_PERCENT_USED}%"
+			PERFDATA="${VOLUME_NAME}=${VOLUME_PERCENT_USED};${WARNING};${CRITICAL};0;100"
+			MESSAGE="${VOLUME_NAME}=${VOLUME_PERCENT_USED}%";
 		else
-			PERFDATA="${PERFDATA}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED}%"
+			PERFDATA="${PERFDATA}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED};${WARNING};${CRITICAL};0;100"
+			MESSAGE="${MESSAGE}, ${VOLUME_NAME}=${VOLUME_PERCENT_USED}%";
 		fi
 	else
 		if [ "$DEBUG" ]; then
@@ -146,7 +153,7 @@ if [ "$DEBUG" ]; then
 	echo "exiting with $EXITCODE"
 fi
 
-echo "${EXITMSG} ${PERFDATA} | ${PERFDATA}"
+echo "${EXITMSG} ${MESSAGE} | ${PERFDATA}"
 exit $EXITCODE
 
 
