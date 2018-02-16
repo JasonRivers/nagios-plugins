@@ -65,38 +65,39 @@ if [ "$DEBUG" ]; then
 	echo "DEBUG: TOTAL_VOLUMES: $TOTAL_VOLUMES"
 fi
 
+SizeInMB () {
+
+	SIZE=$1
+	COMP=$2
+
+	case $COMP in 
+		"TB")
+			SIZE=$(echo "${SIZE} *1024 * 1024" | bc )
+			;;
+		"GB")
+			SIZE=$(echo "${SIZE} * 1024" | bc)
+			;;
+	esac
+
+	echo $SIZE
+}
+
 while [ ${VOLUME} -le ${TOTAL_VOLUMES} ]; do
 	VOLUME_NAME=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_NAME}.${VOLUME} -Oav | sed 's/STRING: "\[//;s/\]"//;s/,//' | awk '{print $2}'`
-	if [ "${VOLUME_NAME}" = "DataVol3" ]; then
-		set -x
-	else
-		set +x
-	fi
 	VOLUME_SIZE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_SIZE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 	VOLUME_FREE=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_VOLUMES_FREE}.${VOLUME} -Oav | sed 's/STRING: "//;s/"//'`
 
 	## ignore dumb volumes
 	if ! [ "${VOLUME_SIZE}" = "0.00 KB" ]; then
 		SIZE_COMP=$(echo ${VOLUME_SIZE} | awk '{print $NF}')
-		VOLUME_SIZE=$(echo $VOLUME_SIZE | awk '{print $1}')
-		VOLUME_FREE=$(echo $VOLUME_FREE | awk '{print $1}')
+		FREE_COMP=$(echo ${VOLUME_FREE} | awk '{print $NF}')
+		VOLUME_SIZE_COMP=$(echo $VOLUME_SIZE | awk '{print $1}')
+		VOLUME_FREE_COMP=$(echo $VOLUME_FREE | awk '{print $1}')
 
-		case $SIZE_COMP in
-			"TB")
-				VOLUME_SIZE=$(echo "$VOLUME_SIZE * 1024 * 1024" | bc )
-				VOLUME_FREE=$(echo "$VOLUME_FREE * 1024 * 1024" | bc )
-				VOLUME_USED=$(echo "$VOLUME_SIZE - $VOLUME_FREE" | bc)
-				;;
-			"GB")
-				VOLUME_SIZE=$(echo "$VOLUME_SIZE * 1024" | bc )
-				VOLUME_FREE=$(echo "$VOLUME_FREE * 1024" | bc )
-				VOLUME_USED=$(echo "$VOLUME_SIZE - $VOLUME_FREE" | bc)
-				;;
-			"MB")
-				;;
-			"KB")
-				;;
-		esac
+		VOLUME_SIZE=$(SizeInMB ${VOLUME_SIZE_COMP} ${SIZE_COMP})
+		VOLUME_FREE=$(SizeInMB ${VOLUME_FREE_COMP} ${FREE_COMP})
+		VOLUME_USED=$(echo "$VOLUME_SIZE - $VOLUME_FREE" | bc)
+
 		VOLUME_PERCENT_USED=$(awk "BEGIN { pc=100*${VOLUME_USED}/${VOLUME_SIZE}; i=int(pc); print (pc-i<0.5)?i:i+1 }")
 		VOLUME_PERCENT_FREE=$(awk "BEGIN { pc=100*${VOLUME_FREE}/${VOLUME_SIZE}; i=int(pc); print (pc-i<0.5)?i:i+1 }")
 		if ! [ "$EXITCODE" = "$STATE_CRITICAL" ]; then
