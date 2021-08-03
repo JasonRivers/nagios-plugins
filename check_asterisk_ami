@@ -36,8 +36,9 @@ print_usage() {
         echo "SupportedCommands:"
         echo "			channels	(check number of current channels in-use)"
         echo "			calls		(check number of current calls)"
-        echo "			sippeers	(check number of current calls)"
-        echo "			iaxpeers	(check number of current calls)"
+        echo "			sippeers	(check number of SIP peers)"
+        echo "			iaxpeers	(check number of IAX calls)"
+        echo "			pjsip   	(check number of PJSIP endpoints)"
 	echo ""
         echo "Usage: $PROGNAME --help"
         echo "Usage: $PROGNAME --version"
@@ -249,6 +250,40 @@ OFFLINE=`echo $SIPpeers | sed 's/.*online, \(.*\) offline.*Unmonitored.*/\1/'`
                 exitstatus=$STATE_WARNING
                 MSG="WARNING: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
         elif [ $OFFLINE -ge $CRITICALNUMBER ]; then
+                exitstatus=$STATE_CRITICAL
+                MSG="CRITICAL: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        fi
+elif [ "${CHECK}" = "pjsip" ]; then
+
+##WARNING
+if [ "$WARNINGNUMBER" = "" ]; then
+WARNINGNUMBER=5
+fi
+if [ "$CRITICALNUMBER" = "" ]; then
+CRITICALNUMBER=10
+fi
+
+EP=0
+        while read L; do
+        let EP="$EP + $L"
+        done < <(/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show endpoints\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/Aor/ {print $4}' | grep -v "MaxContact" | grep -v "Hash" | tr -d "\r")
+        PJSIP_TOTAL_ENDPOINTS=$EP
+	PJSIP_CONTACTS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show contacts\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/Objects/ {print $4}' | tr -d "\r"`
+        ONLINE=$PJSIP_CONTACTS
+        OFFLINE=$(( $PJSIP_TOTAL_ENDPOINTS - $PJSIP_CONTACTS ))
+
+	if [ "$ONLINE" = "" ]; then
+		echo "UNKNOWN: Unable to get number of SIP Peers"
+		exit $STATUS_UNKNOWN
+	fi
+
+        if [ $OFFLINE -lt $WARNINGNUMBER ]; then
+                exitstatus=$STATE_OK
+                MSG="OK: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $OFFLINE -lt $CRITICALNUMBER ]; then
+                exitstatus=$STATE_WARNING
+                MSG="WARNING: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        elif [ $ONLINE -ge $CRITICALNUMBER ]; then
                 exitstatus=$STATE_CRITICAL
                 MSG="CRITICAL: ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
         fi
