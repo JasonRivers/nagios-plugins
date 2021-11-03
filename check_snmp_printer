@@ -164,9 +164,16 @@ else
  SNMPMANU="mib-2.43.8.2.1.14.1.1"
 fi
 
+
 ## Get the Manufacturer
 
-MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPMANU} 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
+MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPMANU} 2>/dev/null | sed 's/.*\ =\ //;s/STRING://;s/"//g'`
+
+if [ "$MANU" = "No Such Object available on this agent at this OID" ]; then
+	MANU=`snmpget -m ALL -v 2c -c public $REMOTEHOST iso.3.6.1.4.1.1347.40.35.1.1.2.1 2>/dev/null | sed "s/.*\ =\ //;s/STRING://;s/\"//g" | awk '{print $1}'` 
+fi
+
+
 STR2=`snmpget -m ALL -v 2c -c public $REMOTEHOST ${SNMPSUPPYSTRING}2 2>/dev/null | sed "s/.*\ \"//;s/\"//"`
 
 
@@ -177,7 +184,7 @@ fi
 # Work out if we're using CMYK (Sane) or BCMY (damn you)!
 
 	## There's probably a better way to work this out by querying the printer
-if [ "$MANU" = "Canon" ] || [ "$MANU" = "Hewlett-Packard" ]; then
+if [ "$MANU" = "Canon" ] || [ "$MANU" = "Hewlett-Packard" ] || [ "$MANU" = "Kyocera" ]; then
 #Damn you Canon / HP
 	BLACK=1
     if [ "$ISCOLOUR" = "true" ]; then
