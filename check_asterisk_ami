@@ -266,9 +266,9 @@ fi
 EP=0
         while read L; do
         let EP="$EP + $L"
-        done < <(/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show endpoints\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Aor/ {print $4}' | grep -v "MaxContact" | grep -v "Hash" | tr -d "\r")
+        done < <(/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show endpoints\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Aor/ {print $3}' | grep -v "MaxContact" | grep -v "Hash" | tr -d "\r")
         PJSIP_TOTAL_ENDPOINTS=$EP
-	PJSIP_CONTACTS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show contacts\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Objects/ {print $4}' | tr -d "\r"`
+	PJSIP_CONTACTS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show contacts\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Objects/ {print $3}' | tr -d "\r"`
         ONLINE=$PJSIP_CONTACTS
         OFFLINE=$(( $PJSIP_TOTAL_ENDPOINTS - $PJSIP_CONTACTS ))
 
