@@ -265,7 +265,7 @@ EP=0
         OFFLINE=$(( $PJSIP_TOTAL_ENDPOINTS - $PJSIP_CONTACTS ))
 
 	if [ "$ONLINE" = "" ]; then
-		echo "UNKNOWN: Unable to get number of SIP Peers"
+		echo "UNKNOWN: Unable to get number of PJSIP Peers"
 		exit $STATUS_UNKNOWN
 	fi
 
@@ -284,7 +284,7 @@ EP=0
                         MSG_PRE="CRITICAL:"
                 fi
         fi
-        MSG="${MSG_PRE} ${ONLINE} online, ${OFFLINE} offline SIP peers|online=${ONLINE} offline=${OFFLINE}"
+        MSG="${MSG_PRE} ${ONLINE} online, ${OFFLINE} offline PJSIP peers|online=${ONLINE} offline=${OFFLINE}"
 
 else
 	echo="CRITICAL: Unknown command"
