@@ -37,7 +37,7 @@ print_usage() {
         echo "			channels	(check number of current channels in-use)"
         echo "			calls		(check number of current calls)"
         echo "			sippeers	(check number of SIP peers)"
-        echo "			iaxpeers	(check number of IAX calls)"
+        echo "			iaxpeers	(check number of IAX peers)"
         echo "			pjsip   	(check number of PJSIP endpoints)"
 	echo ""
         echo "Usage: $PROGNAME --help"
@@ -147,7 +147,7 @@ CRITICALNUMBER=20
 fi
 	## Checking active chanels on Asterisk
 
-	CHANNELS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: CoreShowChannels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} $REMOTEHOST ${AMIPORT} | awk '/^ListItems/ {print $2}'|tr -d "\r"`
+	CHANNELS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: CoreShowChannels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} $REMOTEHOST ${AMIPORT} | sed 's/Output: //' | awk '/^ListItems/ {print $2}'|tr -d "\r"`
 
 	
 	if [ "$CHANNELS" = "" ]; then
@@ -174,7 +174,7 @@ fi
 if [ "$CRITICALNUMBER" = "" ]; then
 CRITICALNUMBER=10
 fi
-	CALLS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: Core Show Channels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/active call/ {print $1}' | tr -d "\r"`
+	CALLS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: Core Show Channels\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/active call/ {print $1}' | tr -d "\r"`
 
 	if [ "$CALLS" = "" ]; then
 		echo "UNKNOWN: Unable to get number of calls"
@@ -204,7 +204,7 @@ if [ "$CRITICALNUMBER" = "" ]; then
 CRITICALNUMBER=10
 fi
 
-	IAXpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: iax2 show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/online/ {print $0}' | tr -d "\r"`
+	IAXpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: iax2 show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/online/ {print $0}' | tr -d "\r"`
 ONLINE=`echo $IAXpeers | sed 's/.*\[\(.*\) online.*unmonitored.*/\1/'`
 OFFLINE=`echo $IAXpeers | sed 's/.*online, \(.*\) offline.*unmonitored.*/\1/'`
 
@@ -234,7 +234,7 @@ if [ "$CRITICALNUMBER" = "" ]; then
 CRITICALNUMBER=10
 fi
 
-	SIPpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: sip show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/online/ {print $0}' | tr -d "\r"`
+	SIPpeers=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: sip show peers\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/online/ {print $0}' | tr -d "\r"`
 ONLINE=`echo $SIPpeers | sed 's/.*Monitored: \(.*\) online.*Unmonitored.*/\1/'`
 OFFLINE=`echo $SIPpeers | sed 's/.*online, \(.*\) offline.*Unmonitored.*/\1/'`
 
@@ -266,9 +266,9 @@ fi
 EP=0
         while read L; do
         let EP="$EP + $L"
-        done < <(/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show endpoints\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/Aor/ {print $4}' | grep -v "MaxContact" | grep -v "Hash" | tr -d "\r")
+        done < <(/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show endpoints\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Aor/ {print $4}' | grep -v "MaxContact" | grep -v "Hash" | tr -d "\r")
         PJSIP_TOTAL_ENDPOINTS=$EP
-	PJSIP_CONTACTS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show contacts\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | awk '/Objects/ {print $4}' | tr -d "\r"`
+	PJSIP_CONTACTS=`/bin/echo -e "Action: login\r\nUsername: ${AMIUSER}\r\nSecret: ${AMIPASS}\r\nEvents: off\r\n\r\nAction: Command\r\ncommand: pjsip show contacts\r\n\r\nAction: Logoff\r\n\r\n" | ${NC} ${REMOTEHOST} ${AMIPORT} | sed 's/Output: //' | awk '/Objects/ {print $4}' | tr -d "\r"`
         ONLINE=$PJSIP_CONTACTS
         OFFLINE=$(( $PJSIP_TOTAL_ENDPOINTS - $PJSIP_CONTACTS ))
 
