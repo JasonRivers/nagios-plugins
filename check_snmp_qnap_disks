@@ -59,7 +59,6 @@ done
 DISK_COUNTER=1
 EXITMSG=""
 
-#AVERAGE_TEMP=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_DISKS_TEMP} -Oav | cut -c "10-11" | awk '{s+=$1}END{print ":",s/NR}' RS=" "`
 AVERAGE_TEMP=`$SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_DISKS_TEMP} -Oav | cut -c "10-11" | awk '{s+=$1}END{print s/NR}' RS=" "`
 if [ $AVERAGE_TEMP -ge $CRITICAL ]; then
 	EXITCODE=$STATE_CRITICAL
@@ -75,7 +74,8 @@ else
 	EXITMSG="UNKNOWN: Unable to get disk temperature"
 fi
 
-while read MODEL_NUMBER; do
+NUMBER_OF_DISKS=$($SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME $OID_NUMBER_OF_DISKS -Oav | sed 's/INTEGER: //')
+while [ $DISK_COUNTER -le $NUMBER_OF_DISKS ]; do
 
 DISK_TEMP=`$SNMPGET -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_DISKS_TEMP}.${DISK_COUNTER} -Oav | cut -c "10-11"`
 DISK_STATUS=`$SNMPGET -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME ${OID_DISKS_STATUS}.${DISK_COUNTER} -Oav | sed 's/STRING: "//;s/"//'`
@@ -88,24 +88,25 @@ if ! [ $EXITCODE = $STATE_CRITICAL ];then
 		fi
 	fi
 
-	if [ $DISK_TEMP -ge $CRITICAL ]; then
-		EXITCODE=$STATE_CRITICAL
-		EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
+	if [ "$DISK_TEMP" != "--" ]; then
+		if [ $DISK_TEMP -ge $CRITICAL ]; then
+			EXITCODE=$STATE_CRITICAL
+			EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
+		fi
 	fi
 	if ! [ "$DISK_STATUS" = "GOOD" ]; then
 		EXITCODE=$STATE_CRITICAL
-		EXITMSG="CRITICAL: Disk has status $DISK_STATUS"
+		EXITMSG="CRITICAL: Disk ${DISK_COUNTER} SMART Status is \"$DISK_STATUS\""
 	fi
 fi
 
-PERFDATA="${PERFDATA}Disk${DISK_COUNTER}_temperature=$DISK_TEMP "
-
-#echo "Disk $DISK_COUNTER ($MODEL_NUMBER) has Temperature of ${DISK_TEMP}C and status of ${DISK_STATUS}"
+if [ "$DISK_TEMP" != "--" ]; then
+	PERFDATA="${PERFDATA}Disk${DISK_COUNTER}_temperature=$DISK_TEMP "
+fi
 
 let DISK_COUNTER=${DISK_COUNTER}+1
 
-done < <($SNMPWALK -c $SNMP_COMMUNITY -v $SNMP_VERSION $REMOTE_HOSTNAME $OID_DISKS_MODEL_NUMBER -Oav | sed 's/STRING: "//;s/"//' | grep "\-\-")
-
+done
 
 echo "${EXITMSG}|${PERFDATA}"
 exit $EXITCODE
