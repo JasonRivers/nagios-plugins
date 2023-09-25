@@ -40,9 +40,26 @@ SNMP_VERSION="2c"
 WARNING=45
 CRITICAL=50
 
-while getopts H:v:C:w:c:hV OPT
+function print_help(){
+	echo -e "check_snmp_qnap_disks {options}\n"
+	echo -e "\t-a\tForce all disks - This will report CRITICAL if there is an empty bay"
+    echo -e "\t-H\tremote Hostname of QNAP (Also accepts IP Address)"
+    echo -e "\t-v\tsnmp version"
+    echo -e "\t-C\tsnmp community"
+    echo -e "\t-w\tTemperature warning"
+    echo -e "\t-c\tTemperature Critical"
+    echo -e "\t-h\tprint_help"
+    echo -e "\t-V\tprint_version"
+}
+
+function print_version(){
+	echo "check_snmp_qnap_disks v0.5"
+}
+
+while getopts aH:v:C:w:c:hV OPT
 do
   case "$OPT" in
+    a) ALLDISKS=true ;;
     H) REMOTE_HOSTNAME="$OPTARG" ;;
     v) SNMP_VERSION="$OPTARG" ;;
     C) SNMP_COMMUNITY="$OPTARG" ;;
@@ -54,6 +71,7 @@ do
        exit "$STATE_UNKNOWN";;
    esac
 done
+
 
 
 DISK_COUNTER=1
@@ -94,9 +112,12 @@ if ! [ $EXITCODE = $STATE_CRITICAL ];then
 			EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
 		fi
 	fi
+	set -x
 	if ! [ "$DISK_STATUS" = "GOOD" ]; then
-		EXITCODE=$STATE_CRITICAL
-		EXITMSG="CRITICAL: Disk ${DISK_COUNTER} SMART Status is \"$DISK_STATUS\""
+	 	if [ "x$ALLDISKS" == "xtrue" ]; then
+			EXITCODE=$STATE_CRITICAL
+			EXITMSG="CRITICAL: Disk ${DISK_COUNTER} SMART Status is \"$DISK_STATUS\""
+	 	fi
 	fi
 fi
 
