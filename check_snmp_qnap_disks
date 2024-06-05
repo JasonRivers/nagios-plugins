@@ -112,7 +112,6 @@ if ! [ $EXITCODE = $STATE_CRITICAL ];then
 			EXITMSG="CRITICAL: Disk Temperature is $DISK_TEMP"
 		fi
 	fi
-	set -x
 	if ! [ "$DISK_STATUS" = "GOOD" ]; then
 	 	if [ "x$ALLDISKS" == "xtrue" ]; then
 			EXITCODE=$STATE_CRITICAL
